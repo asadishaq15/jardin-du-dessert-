@@ -31,8 +31,19 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Italiana&family=Cormorant+Garamond:ital,wght@0,400;1,500;1,400&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-<link rel="preload" href="video/newUpdatedCactusCropped.webm" as="video" type="video/webm">
-<link rel="preload" href="video/cactusanimationnewcropped.mp4" as="video" type="video/mp4">
+<script>
+(function warmCactusClip() {
+  var WEBM = 'video/newUpdatedCactusCropped.webm';
+  var MP4 = 'video/cactusanimationnewcropped.mp4';
+  var ua = navigator.userAgent;
+  var isIOS = /iPhone|iPad|iPod/i.test(ua);
+  var isSafariDesktop = /Macintosh|Mac OS X/i.test(ua) && /Safari/i.test(ua) &&
+    !/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
+  var src = (isIOS || isSafariDesktop) ? MP4 : WEBM;
+  window.__cactusVideoPick = src;
+  fetch(src, { priority: 'high', cache: 'force-cache' }).catch(function () {});
+})();
+</script>
 
 <!-- D3 + TopoJSON for real-world map (loaded async, used in scroll-5) -->
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
@@ -397,9 +408,12 @@
     text-align: center;
     opacity: 0;
     transform: translateY(24px);
+  }
+  .scroll-section.in-view .window {
+    opacity: 1;
+    transform: translateY(0);
     transition: opacity 1s var(--ease), transform 1s var(--ease);
   }
-  .scroll-section.in-view .window { opacity: 1; transform: translateY(0); }
 
   .window--wide { max-width: 1100px; }
   .window--narrow { max-width: 580px; }
@@ -935,7 +949,7 @@
   /* Scroll hint on first content section */
   .scroll-hint {
     position: absolute;
-    bottom: 80px; left: 50%;
+    bottom: 150px; left: 50%;
     transform: translateX(-50%);
     color: #FFFFFF;
     font-family: var(--sans);
@@ -968,10 +982,6 @@
     .window { padding: 48px 24px; }
     /* Loop cycle labels TIGHTER on mobile so they fit around the circle */
     .loop-svg .loop-label { font-size: 14px; letter-spacing: 1.6px; }
-    /* Map smaller and more compact on tablet */
-    .map-window { padding: 40px 24px; }
-    .map-wrap { margin-top: 24px; }
-    .map-svg text { font-size: 12px; letter-spacing: 2px; }
   }
   /* ————— PHONE: scale everything down ~25–30% from desktop ————— */
   @media (max-width: 600px) {
@@ -1231,26 +1241,37 @@
   .map-wrap { min-height: 360px; }
   .map-svg { width: 100%; height: auto; max-height: 78vh; }
 
-  /* Map — mobile only (desktop rules above stay unchanged) */
-  @media (max-width: 600px) {
+  /* Map — mobile / tablet only (desktop rules above stay unchanged) */
+  @media (max-width: 900px) {
+    #scroll-6.scroll-section {
+      padding-left: 10px;
+      padding-right: 10px;
+    }
     #scroll-6 .map-window {
-      --map-gap: clamp(22px, 5.5vw, 30px);
-      padding: 28px 12px;
+      --map-gap: clamp(16px, 4vw, 24px);
+      max-width: none;
+      width: 100%;
+      padding: 16px 0;
+    }
+    #scroll-6 .map-window.window {
+      padding: 20px 0;
     }
     #scroll-6 .map-window .window-body {
-      margin-top: 18px;
+      margin-top: 14px;
+      padding: 0 8px;
     }
     #scroll-6 .map-wrap {
-      width: calc(100vw - 32px);
+      width: 100vw;
       max-width: none;
-      margin-left: calc(50% - 50vw + 16px);
-      margin-right: calc(50% - 50vw + 16px);
+      margin-left: calc(50% - 50vw);
+      margin-right: calc(50% - 50vw);
       margin-top: var(--map-gap);
       min-height: 0;
     }
     #scroll-6 .map-svg {
       width: 100%;
       max-height: none;
+      min-height: clamp(220px, 42vh, 360px);
       display: block;
     }
     #scroll-6 .map-svg text {
@@ -1262,6 +1283,7 @@
       font-size: 9px;
       letter-spacing: 0.24em;
       gap: 16px;
+      padding: 0 12px;
     }
   }
 
@@ -1270,7 +1292,7 @@
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: #FFFFFF;
+    background: #f7f6f4;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1294,7 +1316,7 @@
     overflow: visible;
     flex-shrink: 0;
     line-height: 0;
-    background: #FFFFFF;
+    background: #f7f6f4;
   }
 
   .page-loading__video {
@@ -1307,12 +1329,13 @@
     object-position: top center;
     vertical-align: top;
     margin-bottom: 0;
-    background: #FFFFFF;
   }
 
-  .page-loading__video-wrap--safari,
-  .page-loading__video--safari {
-    background: #FFFFFF;
+  /* Pre-cropped Safari MP4 — same full-frame layout as WebM */
+  .page-loading__video-wrap--safari {
+    width: fit-content;
+    height: auto;
+    overflow: visible;
   }
 
   .page-loading__below {
@@ -1377,22 +1400,7 @@
 <!-- ————— CACTUS LOADING (plays once, then reveals page) ————— -->
 <div class="page-loading" id="page-loading" role="status" aria-live="polite" aria-label="Loading">
   <div class="page-loading__content">
-    <div class="page-loading__video-wrap" id="page-loading-video-wrap">
-      <video
-        id="page-loading-video"
-        class="page-loading__video"
-        muted
-        playsinline
-        autoplay
-        loop
-        preload="auto"
-        fetchpriority="high"
-        aria-hidden="true"
-      >
-        <source src="video/newUpdatedCactusCropped.webm" type="video/webm">
-        <source src="video/cactusanimationnewcropped.mp4" type="video/mp4">
-      </video>
-    </div>
+    <div class="page-loading__video-wrap" id="page-loading-video-wrap"></div>
     <div class="page-loading__below" id="page-loading-below">
       <p class="page-loading__text">You are entering silence</p>
       <div class="page-loading__bar-container">
@@ -1726,6 +1734,86 @@
 </div>
 
 <script>
+  // ————— CACTUS LOADING VIDEO (mirrors src/utils/cactusLoadingVideo.js + DesertLoading.jsx) —————
+  const cactusLoadingVideo = (function () {
+    const CACTUS_VIDEO_WEBM = 'video/newUpdatedCactusCropped.webm';
+    const CACTUS_VIDEO_SAFARI_MP4 = 'video/cactusanimationnewcropped.mp4';
+    const SCENE_DEFER_TIMEOUT_WEBM_MS = 400;
+    const SCENE_DEFER_TIMEOUT_MP4_MS = 1200;
+    const HAVE_CURRENT_DATA = 2;
+
+    let preloadPromise = null;
+    let preloadedSrc = null;
+    let preloadVideoEl = null;
+
+    function pickCactusVideoSrc() {
+      if (window.__cactusVideoPick) return window.__cactusVideoPick;
+      const ua = navigator.userAgent;
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      const isSafariDesktop =
+        /Macintosh|Mac OS X/i.test(ua) &&
+        /Safari/i.test(ua) &&
+        !/Chrome|Chromium|CriOS|Edg|OPR|FxiOS/i.test(ua);
+      return isIOS || isSafariDesktop ? CACTUS_VIDEO_SAFARI_MP4 : CACTUS_VIDEO_WEBM;
+    }
+
+    function isSafariMp4(src) {
+      return src === CACTUS_VIDEO_SAFARI_MP4;
+    }
+
+    function preloadCactusLoadingVideo() {
+      if (preloadPromise) return preloadPromise;
+
+      preloadedSrc = pickCactusVideoSrc();
+      const isMp4 = isSafariMp4(preloadedSrc);
+
+      preloadPromise = new Promise((resolve) => {
+        const video = document.createElement('video');
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        video.setAttribute('fetchpriority', 'high');
+        video.src = preloadedSrc;
+        preloadVideoEl = video;
+
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(video);
+        };
+
+        const timeoutMs = isMp4 ? SCENE_DEFER_TIMEOUT_MP4_MS : SCENE_DEFER_TIMEOUT_WEBM_MS;
+        const timeoutId = setTimeout(finish, timeoutMs);
+
+        video.addEventListener('loadeddata', finish, { once: true });
+        video.addEventListener('canplaythrough', finish, { once: true });
+        video.addEventListener('error', finish, { once: true });
+        video.load();
+      });
+
+      return preloadPromise;
+    }
+
+    function takePreloadedCactusVideoElement() {
+      const el = preloadVideoEl;
+      preloadVideoEl = null;
+      return el;
+    }
+
+    preloadCactusLoadingVideo();
+
+    return {
+      CACTUS_VIDEO_SAFARI_MP4,
+      pickCactusVideoSrc,
+      isSafariMp4,
+      preloadCactusLoadingVideo,
+      takePreloadedCactusVideoElement,
+      HAVE_CURRENT_DATA,
+    };
+  })();
+
   // ————— DESERT AMBIENT SOUND (root-level — mirrors useDesertAudio + useSoundStore) —————
   const desertAudio = (function () {
     const audio = document.getElementById('desert-audio');
@@ -2293,8 +2381,12 @@
     const sections = document.querySelectorAll('.scroll-section');
     const io = new IntersectionObserver((entries) => {
       entries.forEach(en => {
-        if (en.isIntersecting) en.target.classList.add('in-view');
-        else en.target.classList.remove('in-view');
+        if (en.isIntersecting) {
+          en.target.classList.add('in-view');
+        } else if (document.body.classList.contains('scrolling-down')) {
+          /* Only fade out when scrolling down — keep visible when scrolling back up. */
+          en.target.classList.remove('in-view');
+        }
       });
     }, { threshold: 0.25 });
     sections.forEach(s => io.observe(s));
@@ -2305,27 +2397,25 @@
     const FADE_MS = 1200;
     const FALLBACK_MIN_MS = 3000;
     const overlay = document.getElementById('page-loading');
-    const video = document.getElementById('page-loading-video');
     const videoWrap = document.getElementById('page-loading-video-wrap');
     const below = document.getElementById('page-loading-below');
     const bar = document.getElementById('page-loading-bar');
+
+    const videoSrc = cactusLoadingVideo.pickCactusVideoSrc();
+    const isSafariVideo = cactusLoadingVideo.isSafariMp4(videoSrc);
+
+    if (isSafariVideo && videoWrap) {
+      videoWrap.classList.add('page-loading__video-wrap--safari');
+    }
 
     let hasPlayedOnce = false;
     let pageReady = false;
     let videoDurationMs = FALLBACK_MIN_MS;
     let playbackTimer = null;
+    let video = null;
 
     function markVideoReady() {
       below?.classList.add('is-visible');
-    }
-
-    function tagSafariSource() {
-      if (!video || !videoWrap) return;
-      const src = video.currentSrc || '';
-      if (src.includes('.mp4')) {
-        videoWrap.classList.add('page-loading__video-wrap--safari');
-        video.classList.add('page-loading__video--safari');
-      }
     }
 
     function startPlaybackTimer(ms) {
@@ -2348,29 +2438,62 @@
       }, FADE_MS);
     }
 
-    overlay?.addEventListener('pointerdown', () => {
-      desertAudio.unlockFromGesture();
-    }, { once: true });
+    function wireVideo(el) {
+      if (!el || !videoWrap) return;
+      video = el;
+      video.className = 'page-loading__video' + (isSafariVideo ? ' page-loading__video--safari' : '');
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.autoplay = true;
+      video.preload = 'auto';
+      video.setAttribute('fetchpriority', 'high');
+      video.setAttribute('aria-hidden', 'true');
+      if (!video.src) video.src = videoSrc;
 
-    if (video) {
       video.addEventListener('loadedmetadata', () => {
         if (Number.isFinite(video.duration) && video.duration > 0) {
           videoDurationMs = video.duration * 1000;
         }
-        tagSafariSource();
       });
-      video.addEventListener('loadeddata', () => {
-        markVideoReady();
-        tagSafariSource();
-      });
+      video.addEventListener('loadeddata', markVideoReady);
+      video.addEventListener('canplay', markVideoReady);
       video.addEventListener('playing', () => {
         markVideoReady();
         startPlaybackTimer(videoDurationMs);
       });
       video.addEventListener('error', () => startPlaybackTimer(FALLBACK_MIN_MS));
+
+      videoWrap.replaceChildren(video);
+
+      if (video.readyState >= cactusLoadingVideo.HAVE_CURRENT_DATA) {
+        markVideoReady();
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          videoDurationMs = video.duration * 1000;
+        }
+      }
+
       video.play().catch(() => startPlaybackTimer(FALLBACK_MIN_MS));
+    }
+
+    overlay?.addEventListener('pointerdown', () => {
+      desertAudio.unlockFromGesture();
+    }, { once: true });
+
+    const preloaded = cactusLoadingVideo.takePreloadedCactusVideoElement();
+    if (preloaded) {
+      wireVideo(preloaded);
     } else {
-      startPlaybackTimer(FALLBACK_MIN_MS);
+      cactusLoadingVideo.preloadCactusLoadingVideo().then(() => {
+        const el = cactusLoadingVideo.takePreloadedCactusVideoElement();
+        if (el) {
+          wireVideo(el);
+        } else {
+          const fallback = document.createElement('video');
+          fallback.src = videoSrc;
+          wireVideo(fallback);
+        }
+      });
     }
 
     window.addEventListener('load', () => {
