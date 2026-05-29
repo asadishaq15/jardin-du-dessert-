@@ -1,0 +1,2299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jardin du Désert · jardindudesert.com</title>
+
+<!--
+  JARDIN DU DÉSERT · The Desert Journey
+  ————————————————————————————————————————————
+  Single-page scroll narrative for hospitality acquisition.
+  Persistent B&W desert background. White "windows" appear/disappear as user scrolls.
+
+  Flow:
+    LOADING (cactus animation · white screen · "You are entering silence.")
+    → DESERT REVEAL
+    → SCROLL 1  The Desert Is A System
+    → SCROLL 2  The Problem
+    → SCROLL 3  Memory
+    → SCROLL 4  1 State · 1 Property · 1 Scent · 1 Ritual
+    → SCROLL 5  The Global State Network (map)
+    → SCROLL 6  States (hover reveals)
+    → SCROLL 7  How the System Works
+    → SCROLL 8  Claim a State
+    → SCROLL 9  Apply for Residency
+
+  Forbidden CSS: glass · blur · shadow · gradient (except copper signal) · heavy animation
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Italiana&family=Cormorant+Garamond:ital,wght@0,400;1,500;1,400&family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="preload" href="video/newUpdatedCactusCropped.webm" as="video" type="video/webm">
+<link rel="preload" href="video/cactusanimationnewcropped.mp4" as="video" type="video/mp4">
+
+<!-- D3 + TopoJSON for real-world map (loaded async, used in scroll-5) -->
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
+<style>
+  /* ————— RESET ————— */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  html { scroll-behavior: smooth; }
+  button { background: none; border: 0; font: inherit; color: inherit; cursor: pointer; }
+  input, textarea, select { background: transparent; border: 0; font: inherit; color: inherit; outline: none; }
+  a { color: inherit; text-decoration: none; }
+
+  /* ————— TOKENS ————— */
+  :root {
+    --bg: #FFFFFF;
+    --ink: #000000;
+    --muted: #6E6E6E;
+    --muted-soft: #9A9A9A;
+    --sand: #C9C2B6;
+    /* Copper — signal of choice only. */
+    --copper: #C57A4A;
+    --copper-deep: #9A5A2E;
+    --copper-light: #E6B98A;
+    --pad: clamp(24px, 4vw, 56px);
+    --serif: "Grand Slang", "Italiana", "Cormorant Garamond", "Playfair Display", Georgia, serif;
+    --serif-italic: "Cormorant Garamond", "Italiana", Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
+
+  body {
+    background: var(--sand);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  body.page-loading { overflow: hidden; }
+
+  .micro {
+    font-family: var(--sans); font-weight: 500;
+    font-size: 11px; letter-spacing: 0.32em;
+    text-transform: uppercase; color: var(--muted);
+  }
+
+  /* ————— DESERT BACKGROUND (persistent) ————— */
+  /* Uses an <img> instead of background-image — works reliably on iOS Safari
+     mobile (where background-image:cover sometimes fails to render on fixed
+     elements behind transformed siblings). */
+  .desert-bg {
+    position: fixed; inset: 0;
+    background: var(--sand);
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 1.4s var(--ease);
+    overflow: hidden;
+  }
+  .desert-bg.visible { opacity: 1; }
+  .desert-bg img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: center 60%;
+    filter: grayscale(1) contrast(0.94) brightness(1.02);
+    display: block;
+  }
+
+  /* ————— TOP / BOTTOM FRAMES ————— */
+  /* Frames sit above the loading screen so SOUND is visible from second one.
+     Scroll-direction state on <body> drives the show/hide + white-bg behaviour. */
+  .frame-top {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 22px var(--pad);
+    z-index: 260;
+    pointer-events: none;
+    color: var(--ink);
+    background: transparent;
+    transition: background-color .35s var(--ease),
+                opacity .35s var(--ease),
+                transform .4s var(--ease);
+  }
+  .frame-top > * { pointer-events: auto; }
+  .frame-top__end {
+    display: flex;
+    align-items: center;
+    gap: clamp(28px, 3.5vw, 44px);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+  .brand .jdd-mark { width: 28px; height: 24px; flex-shrink: 0; }
+  .brand .wordmark {
+    font-family: var(--serif); font-size: 12px;
+    letter-spacing: 0.32em; text-transform: uppercase; line-height: 1;
+  }
+  .frame-top nav { display: flex; gap: 28px; align-items: center; }
+  /* White text + mix-blend-mode keeps the label readable on dark desert
+     AND on the white scroll-windows (inverts per element, not whole frame). */
+  .nav-btn {
+    font-family: var(--sans); font-size: 10px;
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: #FFFFFF;
+    font-weight: 600;
+    mix-blend-mode: difference;
+    transition: opacity .3s var(--ease);
+  }
+  .nav-btn:hover { opacity: .6; }
+
+  /* SOUND regulator — top-right corner (after nav). */
+  .sound-ctl {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--copper-deep);
+    cursor: pointer;
+    background: transparent; border: 0; padding: 4px;
+    transition: opacity .3s var(--ease);
+    align-self: flex-start;
+    margin-top: -12px;
+  }
+  .sound-ctl:hover { opacity: .7; }
+  /* Sound control = white animated bars only (no speaker icon) */
+  .sound-ctl .sound-bars {
+    display: inline-flex;
+    align-items: flex-end;
+    height: 20px;
+    gap: 3px;
+  }
+  .sound-ctl .sound-bars span {
+    display: block;
+    width: 3px;
+    background: #FFFFFF;
+    height: 4px;
+    transition: height .4s var(--ease);
+  }
+  .sound-ctl.is-on .sound-bars span { animation: barPulse 1.1s var(--ease) infinite; }
+  .sound-ctl.is-on .sound-bars span:nth-child(2) { animation-delay: .15s; }
+  .sound-ctl.is-on .sound-bars span:nth-child(3) { animation-delay: .3s; }
+  .sound-ctl.is-on .sound-bars span:nth-child(4) { animation-delay: .45s; }
+  .sound-ctl.is-off .sound-bars span { height: 4px; opacity: .35; }
+  @keyframes barPulse { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sound-ctl.is-on .sound-bars span { animation: none; height: 8px; }
+  }
+
+  /* ————— INTELLIGENCE OVERLAY (5 scroll-snap slides) ————— */
+  .intel-overlay {
+    position: fixed; inset: 0;
+    background: #FFFFFF;
+    z-index: 150;
+    display: none;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    scroll-snap-type: y mandatory;
+    overscroll-behavior: contain;
+    animation: fadeIn .35s var(--ease);
+  }
+  .intel-overlay.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .intel-close {
+    position: fixed; top: 24px; right: var(--pad);
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: transparent; border: 0; padding: 0;
+    cursor: pointer;
+    z-index: 160;
+    transition: color .3s var(--ease);
+    display: none;
+  }
+  .intel-overlay.active ~ .intel-close,
+  .intel-overlay.active .intel-close { display: inline-block; }
+  .intel-close:hover { color: var(--ink); }
+
+  .intel-progress {
+    position: fixed; top: 28px; left: var(--pad);
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+    z-index: 160;
+    display: none;
+  }
+  .intel-overlay.active ~ .intel-progress,
+  .intel-overlay.active .intel-progress { display: inline-block; }
+
+  .intel-screen {
+    height: 100vh;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 100px var(--pad) 80px;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    gap: 24px;
+  }
+
+  .intel-eyebrow {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .intel-num {
+    font-family: var(--serif);
+    font-size: clamp(28px, 3.6vw, 44px);
+    letter-spacing: 0.12em;
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+    font-weight: 400;
+  }
+  .intel-headline {
+    font-family: var(--serif);
+    font-size: clamp(24px, 3.6vw, 40px);
+    letter-spacing: 0.08em;
+    line-height: 1.25;
+    font-weight: 600;
+    max-width: 720px;
+  }
+  .intel-body {
+    max-width: 600px;
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 2;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  .intel-body p + p { margin-top: 10px; }
+
+  /* Scroll hint on slides 1–4 */
+  .intel-scroll-hint {
+    position: absolute;
+    bottom: 40px; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: inline-flex; flex-direction: column;
+    align-items: center; gap: 6px;
+    opacity: 0.7;
+    animation: scrollHintBob 2.4s var(--ease) infinite;
+  }
+  .intel-scroll-hint .arrow { font-size: 14px; line-height: 1; }
+  @keyframes scrollHintBob {
+    0%, 100% { transform: translate(-50%, 0); opacity: .7; }
+    50%      { transform: translate(-50%, 4px); opacity: 1; }
+  }
+
+  /* Return-to-desert hint on the final slide (scroll triggers the actual return) */
+  .intel-return-hint {
+    margin-top: 36px;
+    display: inline-flex; flex-direction: column;
+    align-items: center; gap: 10px;
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: returnBob 2.4s var(--ease) infinite;
+    pointer-events: none;
+  }
+  .intel-return-hint .arrow {
+    font-size: 16px; line-height: 1;
+    -webkit-text-fill-color: var(--copper-deep);
+  }
+  @keyframes returnBob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(5px); }
+  }
+
+  /* Invisible final scroll-snap slot — scrolling into it triggers return-to-desert */
+  .intel-trigger {
+    background: transparent;
+  }
+
+  .frame-bottom {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px var(--pad);
+    z-index: 50;
+    pointer-events: none;
+    color: var(--ink);
+    background: transparent;
+    transition: background-color .35s var(--ease),
+                opacity .35s var(--ease),
+                transform .4s var(--ease);
+  }
+  .frame-bottom .micro {
+    color: #FFFFFF;
+    mix-blend-mode: difference;
+    opacity: .95;
+  }
+
+  /* ————— SCROLL DIRECTION BEHAVIOUR —————
+     Frames stay fully transparent — only their VISIBILITY toggles by direction.
+     Down → header visible / footer hidden.   Up → header hidden / footer visible. */
+  body.scrolling-down .frame-bottom {
+    opacity: 0;
+    transform: translateY(100%);
+    pointer-events: none;
+  }
+  body.scrolling-up .frame-top {
+    opacity: 0;
+    transform: translateY(-100%);
+    pointer-events: none;
+  }
+  /* When INTELLIGENCE overlay is open, keep the top frame visible (so user
+     can hit CONTACT) but HIDE the sound regulator — it has no place there. */
+  body.intel-open .frame-top {
+    opacity: 1 !important;
+    transform: none !important;
+    pointer-events: auto !important;
+  }
+  body.intel-open .frame-top > * { pointer-events: auto !important; }
+  /* Hide SOUND on the INTELLIGENCE page */
+  body.intel-open .sound-ctl { display: none; }
+  body.intel-open .frame-top__end { gap: 0; }
+
+  /* ————— JOURNEY ————— */
+  .journey { position: relative; }
+
+  .scroll-section {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 120px var(--pad);
+    position: relative;
+  }
+
+  /* Window — no background, text floats over the desert. White text everywhere. */
+  .window {
+    background: transparent;
+    color: #FFFFFF;
+    max-width: 720px; width: 100%;
+    padding: 32px clamp(20px, 4vw, 56px);
+    text-align: center;
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 1s var(--ease), transform 1s var(--ease);
+  }
+  .scroll-section.in-view .window { opacity: 1; transform: translateY(0); }
+
+  .window--wide { max-width: 1100px; }
+  .window--narrow { max-width: 580px; }
+
+  .window .eyebrow {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.75);
+    margin-bottom: 28px;
+  }
+  .window h2 {
+    font-family: var(--serif);
+    font-size: clamp(30px, 5vw, 56px);
+    line-height: 1.1;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: #FFFFFF;
+  }
+  .window h2 + .window-body,
+  .window .lede-big + .window-body { margin-top: 36px; }
+
+  .window-body {
+    font-family: var(--sans); font-weight: 500;
+    font-size: 16px; line-height: 2;
+    letter-spacing: 0.04em;
+    color: #FFFFFF;
+  }
+  .window-body p + p { margin-top: 6px; }
+  .window-body .dim { color: rgba(255,255,255,0.75); font-weight: 500; }
+  .window-body strong {
+    font-family: var(--serif); font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    font-size: 15px;
+    color: #FFFFFF;
+  }
+  .window .lede-big { color: #FFFFFF; font-weight: 500; }
+
+  /* ————— SCROLL 4 — Beyond The Lobby (bottle + spray) ————— */
+  .bottle-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 8px 0 24px;
+  }
+  .bottle-svg {
+    width: 110px;
+    height: auto;
+    overflow: visible;
+  }
+  .bottle-outline {
+    fill: none;
+    stroke: #FFFFFF;
+    stroke-width: 1.4;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  /* Spray TOWARD the viewer — particles emerge from the nozzle and grow
+     massively while fading. The scale-up reads as perspective: white mist
+     coming straight at the camera instead of drifting across the screen. */
+  .spray .p {
+    fill: #FFFFFF;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: sprayPuff 2s ease-out infinite;
+  }
+  .spray .p:nth-child(1) { animation-delay: 0s;    }
+  .spray .p:nth-child(2) { animation-delay: 0.18s; }
+  .spray .p:nth-child(3) { animation-delay: 0.36s; }
+  .spray .p:nth-child(4) { animation-delay: 0.54s; }
+  .spray .p:nth-child(5) { animation-delay: 0.72s; }
+  .spray .p:nth-child(6) { animation-delay: 0.90s; }
+  .spray .p:nth-child(7) { animation-delay: 1.08s; }
+  @keyframes sprayPuff {
+    0%   { opacity: 0;    transform: translate(0, 0) scale(0.15); }
+    8%   { opacity: 1;    transform: translate(0, 0) scale(0.6); }
+    30%  { opacity: 0.85; transform: translate(0, -2px) scale(2.2); }
+    65%  { opacity: 0.5;  transform: translate(0, -5px) scale(5); }
+    100% { opacity: 0;    transform: translate(0, -10px) scale(9); }
+  }
+
+  /* ————— SCROLL 5 — Principle lede ————— */
+  .lede-big {
+    font-family: var(--serif);
+    font-size: clamp(22px, 3vw, 34px);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    line-height: 1.6;
+    font-weight: 400;
+  }
+  /* Column variant — each phrase stacked on its own line */
+  .lede-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.3;
+  }
+  /* Light-vibration on each individual line, staggered for editorial rhythm */
+  .lede-stack > div {
+    color: #FFFFFF;
+    animation: whiteVibrate 4.2s ease-in-out infinite;
+  }
+  .lede-stack > div:nth-child(1) { animation-delay: 0s;   }
+  .lede-stack > div:nth-child(2) { animation-delay: 0.6s; }
+  .lede-stack > div:nth-child(3) { animation-delay: 1.2s; }
+
+  /* ————— SCROLL 5 — Map ————— */
+  .map-window { padding: 56px clamp(32px, 5vw, 72px); }
+  .map-wrap {
+    margin-top: 40px;
+    position: relative;
+    min-height: 240px;
+  }
+  /* Placeholder shown until the d3 atlas finishes fetching/drawing */
+  .map-wrap.is-loading::before {
+    content: 'Loading map…';
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--sans); font-size: 10px;
+    letter-spacing: 0.42em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .map-svg { width: 100%; height: auto; display: block; color: var(--ink); }
+  /* Sphere — invisible (no background plate) */
+  .map-svg .sphere { display: none; }
+  /* Faint atlas grid */
+  .map-svg .graticule {
+    fill: none;
+    stroke: #9A9A9A;
+    stroke-width: 0.25;
+    opacity: 0.10;
+  }
+  /* Landmasses — white fill, grey edges only */
+  .map-svg .land {
+    fill: #FFFFFF;
+    stroke: #6E6E6E;
+    stroke-width: 0.55;
+    opacity: 1;
+  }
+  /* Subtle available-territory dots — grey to match the outline tone */
+  .map-svg .dot { fill: #6E6E6E; }
+  .map-svg .dot--copper { fill: var(--copper-deep); }
+  .map-svg .ring {
+    fill: none;
+    stroke: var(--copper);
+    stroke-width: 1;
+    opacity: 0;
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: ringPulse 2.6s var(--ease) infinite;
+  }
+  @keyframes ringPulse {
+    0%   { transform: scale(1);   opacity: .7; }
+    100% { transform: scale(6);   opacity: 0;  }
+  }
+  .map-svg text {
+    font-family: "Inter", sans-serif;
+    font-size: 9px;
+    letter-spacing: 2.5px;
+    fill: var(--copper-deep);
+    text-transform: uppercase;
+  }
+
+  .map-legend {
+    display: flex; gap: 32px; justify-content: center; flex-wrap: wrap;
+    margin-top: 32px;
+    font-family: var(--sans); font-size: 10px;
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .map-legend .lg { display: inline-flex; align-items: center; gap: 8px; }
+  .map-legend .lg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+  .map-legend .lg-dot--copper { background: var(--copper-deep); }
+
+  /* ————— SCROLL 6 — States (read only, hover reveal) ————— */
+  .states-window { padding: 56px clamp(32px, 5vw, 64px); }
+  .states-grid {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--ink);
+  }
+  .state-row {
+    padding: 26px 22px;
+    border-bottom: 1px solid var(--ink);
+    border-right: 1px solid var(--ink);
+    text-align: left;
+    min-height: 132px;
+    transition: background .3s var(--ease);
+    cursor: default;
+  }
+  .state-row:nth-child(3n) { border-right: 0; }
+  .state-row .state-name {
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .state-row .state-desc {
+    margin-top: 12px;
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    line-height: 1.7;
+    opacity: 0;
+    transition: opacity .4s var(--ease);
+  }
+  .state-row:hover { background: #F7F4EF; }
+  .state-row:hover .state-desc { opacity: 1; }
+
+  /* ————— SCROLL 7 — State Assignment (recommendations) ————— */
+  .assign-window { padding: 56px clamp(32px, 5vw, 64px); }
+  .assign-intro {
+    margin-top: 28px;
+    font-family: var(--sans); font-weight: 300;
+    font-size: 15px; line-height: 1.9;
+    letter-spacing: 0.04em; color: var(--ink);
+    max-width: 720px; margin-left: auto; margin-right: auto;
+  }
+  .assign-intro p + p { margin-top: 12px; }
+  .assign-intro .dim { color: var(--muted); }
+
+  .assign-grid {
+    margin-top: 48px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-top: 1px solid var(--ink);
+  }
+  .assign-cell {
+    padding: 28px 24px;
+    border-bottom: 1px solid var(--ink);
+    border-right: 1px solid var(--ink);
+    text-align: left;
+  }
+  .assign-cell:nth-child(3n) { border-right: 0; }
+  .assign-cell .a-name {
+    font-family: var(--serif);
+    font-size: 17px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .assign-cell .a-label {
+    margin-top: 16px;
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .assign-cell ul {
+    margin-top: 10px;
+    list-style: none;
+    font-family: var(--serif-italic);
+    font-style: italic;
+    font-size: 14px;
+    letter-spacing: 0.03em;
+    line-height: 1.85;
+    color: var(--ink);
+    font-weight: 500;
+  }
+
+  /* ————— SCROLL 8 — Loop of Return (cycle) ————— */
+  .flow-window { padding: 64px clamp(24px, 4vw, 56px); max-width: 760px; }
+  .loop-svg-host {
+    margin-top: 36px;
+    width: 100%;
+    display: block;
+  }
+  .loop-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    color: var(--ink);
+    overflow: visible;   /* allow long labels (MEMORY RETENTION, INVITATION RITUAL) to render past viewBox edges */
+  }
+  .loop-svg .loop-arc {
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1;
+    opacity: 0.7;
+  }
+  .loop-svg .loop-arc--return {
+    stroke: var(--copper-deep);
+    opacity: 1;
+    stroke-width: 1.2;
+  }
+  .loop-svg .loop-node circle.node-dot {
+    fill: var(--ink);
+  }
+  .loop-svg .loop-node.is-end circle.node-dot {
+    fill: var(--copper-deep);
+  }
+  /* Pulsing ring around RETURN — same animation as the map's copper markers. */
+  .loop-svg .loop-node.is-end circle.node-pulse {
+    fill: none;
+    stroke: var(--copper-deep);
+    stroke-width: 1;
+    opacity: 0;
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: ringPulse 2.6s var(--ease) infinite;
+  }
+  .loop-svg .loop-label {
+    font-family: var(--serif), Georgia, serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    fill: var(--ink);
+    font-weight: 600;
+  }
+  .loop-svg .loop-node.is-end .loop-label {
+    fill: var(--copper-deep);
+  }
+  .loop-svg .loop-center {
+    font-family: var(--serif-italic), Georgia, serif;
+    font-style: italic;
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    fill: var(--muted);
+  }
+
+  /* ————— SCROLL 8 — Claim grid ————— */
+  .claim-window { padding: 56px clamp(32px, 5vw, 64px); }
+  .claim-legend {
+    display: flex; gap: 32px; justify-content: center; flex-wrap: wrap;
+    margin-top: 28px;
+    font-family: var(--sans); font-size: 10px;
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .claim-legend .lg { display: inline-flex; align-items: center; gap: 8px; }
+  .claim-legend .lg-mark {
+    width: 10px; height: 10px;
+    border: 1px solid var(--ink);
+  }
+  .claim-legend .lg-mark--reserved { background: var(--ink); }
+  .claim-legend .lg-mark--assigned { background: #DDD7CC; border-color: var(--muted); }
+  .claim-legend .lg-lock {
+    width: 13px; height: 13px;
+    color: var(--copper-deep);
+    flex-shrink: 0;
+  }
+
+  .claim-grid {
+    margin-top: 36px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--ink);
+  }
+  .claim-cell {
+    padding: 24px 18px;
+    border-bottom: 1px solid var(--ink);
+    border-right: 1px solid var(--ink);
+    cursor: pointer;
+    text-align: left;
+    transition: background .3s var(--ease), color .3s var(--ease);
+    display: flex; flex-direction: column; gap: 10px;
+    min-height: 130px;
+  }
+  .claim-cell:nth-child(4n) { border-right: 0; }
+  .claim-cell:hover:not(.is-assigned) { background: #F7F4EF; }
+  .claim-cell .c-name {
+    font-family: var(--serif);
+    font-size: 16px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .claim-cell .c-status {
+    font-family: var(--sans);
+    font-size: 9px;
+    letter-spacing: 0.36em;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .claim-cell .c-lock {
+    width: 12px; height: 12px;
+    color: var(--copper-deep);
+    flex-shrink: 0;
+  }
+  .claim-cell.is-reserved .c-status { color: var(--ink); }
+  .claim-cell.is-assigned {
+    background: #EFEAE0;
+    cursor: default;
+    opacity: 0.7;
+  }
+  .claim-cell.is-assigned .c-name { text-decoration: line-through; text-decoration-thickness: 1px; }
+  .claim-cell.is-chosen {
+    background: #FFF8F0;
+  }
+  .claim-cell.is-chosen .c-name {
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .claim-cell.is-chosen .c-status { color: var(--copper-deep); }
+  .claim-grid.has-chosen .claim-cell:not(.is-chosen):not(.is-assigned) { opacity: .55; }
+
+  /* ————— SCROLL 9 — Form ————— */
+  .form-window { padding: 56px clamp(32px, 5vw, 64px); }
+  .form-body {
+    margin-top: 40px;
+    display: flex; flex-direction: column;
+    gap: 32px;
+    text-align: left;
+  }
+  .field {
+    display: flex; flex-direction: column;
+    gap: 10px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 6px;
+  }
+  .field label {
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .field input, .field textarea {
+    font-family: var(--serif);
+    font-size: 17px;
+    letter-spacing: 0.06em;
+    padding: 4px 0;
+    color: var(--ink);
+    text-transform: uppercase;
+    width: 100%;
+    resize: none;
+  }
+  .field textarea { text-transform: none; min-height: 60px; line-height: 1.5; }
+  .field input::placeholder, .field textarea::placeholder {
+    color: var(--muted-soft); opacity: 1;
+    font-family: var(--serif); letter-spacing: 0.06em;
+  }
+  .field-selected {
+    font-family: var(--serif);
+    font-size: 17px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 4px 0;
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .field-selected.empty {
+    background: none;
+    -webkit-text-fill-color: var(--muted-soft);
+    color: var(--muted-soft);
+    font-size: 13px;
+    letter-spacing: 0.16em;
+  }
+  .form-actions {
+    display: flex; gap: 24px; justify-content: center; align-items: center;
+    margin-top: 12px;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 14px;
+    padding: 14px 28px;
+    font-family: var(--serif);
+    font-size: 13px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    border: 1px solid var(--ink);
+    background: transparent;
+    transition: background .35s var(--ease), color .35s var(--ease);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--ink); color: #FFFFFF; }
+  .btn:disabled { opacity: .5; pointer-events: none; }
+  .form-error {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #b44;
+    text-align: center;
+  }
+  .btn--ghost {
+    padding: 10px 0; border: 0;
+    font-family: var(--sans);
+    font-size: 10px; letter-spacing: 0.32em;
+    color: var(--muted);
+  }
+  .btn--ghost:hover { color: var(--ink); }
+
+  /* Confirmation surfaces on its own horizontal white card (not over the desert) */
+  .submitted-msg {
+    text-align: center;
+    background: #FFFFFF;
+    padding: 36px clamp(40px, 6vw, 80px);
+    max-width: 820px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .submitted-msg h3 {
+    font-family: var(--serif);
+    font-size: clamp(24px, 3vw, 36px);
+    letter-spacing: 0.14em;
+    font-weight: 600;
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .submitted-msg p {
+    margin-top: 16px;
+    /* warm desert-tone grey — sits between sand and ink */
+    color: #7A736A;
+    font-size: 14px;
+    line-height: 1.7;
+    letter-spacing: 0.04em;
+    animation: none !important;
+    text-shadow: none !important;
+  }
+  /* Force the form window to widen so the horizontal card fits */
+  #scroll-11 .window { max-width: 860px; }
+
+  /* Scroll hint on first content section */
+  .scroll-hint {
+    position: absolute;
+    bottom: 80px; left: 50%;
+    transform: translateX(-50%);
+    color: #FFFFFF;
+    font-family: var(--sans);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: hintIn 1.2s var(--ease) 5.6s forwards, hintBob 2.4s var(--ease) 6.8s infinite;
+  }
+  @keyframes hintIn { to { opacity: .85; } }
+  @keyframes hintBob {
+    0%, 100% { transform: translate(-50%, 0); }
+    50%      { transform: translate(-50%, 6px); }
+  }
+
+  /* ————— RESPONSIVE ————— */
+  /* ————— RESPONSIVE — preserve full desktop structure on mobile ————— */
+  @media (max-width: 900px) {
+    .states-grid { grid-template-columns: repeat(2, 1fr); }
+    .state-row:nth-child(3n) { border-right: 1px solid var(--ink); }
+    .state-row:nth-child(2n) { border-right: 0; }
+    .assign-grid { grid-template-columns: repeat(2, 1fr); }
+    .assign-cell:nth-child(3n) { border-right: 1px solid var(--ink); }
+    .assign-cell:nth-child(2n) { border-right: 0; }
+    .claim-grid { grid-template-columns: repeat(2, 1fr); }
+    .claim-cell:nth-child(4n) { border-right: 1px solid var(--ink); }
+    .claim-cell:nth-child(2n) { border-right: 0; }
+    .frame-top nav { gap: 18px; }
+    .frame-top__end { gap: 22px; }
+    .window { padding: 48px 24px; }
+    /* Loop cycle labels TIGHTER on mobile so they fit around the circle */
+    .loop-svg .loop-label { font-size: 14px; letter-spacing: 1.6px; }
+    /* Map smaller and more compact on tablet */
+    .map-window { padding: 40px 24px; }
+    .map-wrap { margin-top: 24px; }
+    .map-svg text { font-size: 12px; letter-spacing: 2px; }
+  }
+  /* ————— PHONE: scale everything down ~25–30% from desktop ————— */
+  @media (max-width: 600px) {
+    /* Base type smaller */
+    body { font-size: 12px; line-height: 1.55; }
+    .micro { font-size: 9px; letter-spacing: 0.28em; }
+    .nav-btn { font-size: 9px; letter-spacing: 0.26em; }
+    .frame-top { padding: 14px 16px; }
+    .frame-bottom { padding: 14px 16px; }
+
+    /* Sections + windows: tight padding */
+    .scroll-section { padding: 76px 14px; }
+    .window { padding: 30px 18px; max-width: 100%; }
+    .window--wide, .window--narrow { max-width: 100%; }
+    .window .eyebrow { font-size: 9px; letter-spacing: 0.34em; margin-bottom: 18px; }
+    .window h2 { font-size: clamp(22px, 6.4vw, 32px); letter-spacing: 0.08em; line-height: 1.15; }
+    .window h2 + .window-body { margin-top: 22px; }
+    .window-body { font-size: 13px; line-height: 1.75; }
+    .window-body strong { font-size: 12px; letter-spacing: 0.14em; }
+    .lede-big { font-size: clamp(17px, 4.8vw, 22px); letter-spacing: 0.18em; line-height: 1.45; }
+
+    /* State catalog rows */
+    .state-row { padding: 18px 14px; min-height: 100px; }
+    .state-row .state-name { font-size: 13px; letter-spacing: 0.14em; }
+    .state-row .state-desc { font-size: 10px; }
+    .states-grid { margin-top: 26px; }
+
+    /* State assignment cards */
+    .assign-cell { padding: 18px 14px; }
+    .assign-cell .a-name { font-size: 13px; letter-spacing: 0.16em; }
+    .assign-cell .a-label { font-size: 8px; letter-spacing: 0.32em; margin-top: 10px; }
+    .assign-cell ul { font-size: 12px; line-height: 1.65; }
+    .assign-intro { font-size: 13px; line-height: 1.7; }
+    .assign-grid { margin-top: 28px; }
+
+    /* Claim grid */
+    .claim-cell { padding: 18px 14px; min-height: 110px; }
+    .claim-cell .c-name { font-size: 13px; letter-spacing: 0.14em; }
+    .claim-cell .c-status { font-size: 8px; letter-spacing: 0.32em; }
+    .claim-legend { font-size: 9px; gap: 18px; }
+    .claim-grid { margin-top: 24px; }
+
+    /* Loop cycle on phones — small, tight, fits the column */
+    .flow-window { padding: 40px 16px; }
+    .loop-svg .loop-label { font-size: 16px; letter-spacing: 2px; }
+
+    /* Map on phones — sized in mobile-only block below (after desktop map rules) */
+
+    /* Form */
+    .form-window { padding: 36px 16px; }
+    .form-body { gap: 22px; margin-top: 28px; }
+    .field input, .field textarea { font-size: 14px; }
+    .field label { font-size: 9px; }
+    .field-selected { font-size: 13px; }
+    .btn { padding: 11px 20px; font-size: 11px; letter-spacing: 0.32em; }
+
+    /* INTELLIGENCE — proportional scale */
+    .intel-screen { padding: 80px 16px 50px; gap: 14px; }
+    .intel-eyebrow { font-size: 9px; letter-spacing: 0.32em; }
+    .intel-num { font-size: clamp(22px, 5vw, 30px); letter-spacing: 0.1em; }
+    .intel-body { font-size: 13px; line-height: 1.7; }
+    .intel-progress { top: 16px; left: 16px; font-size: 9px; }
+    .intel-return-hint { font-size: 9px; letter-spacing: 0.34em; }
+  }
+  @media (max-width: 420px) {
+    .states-grid, .assign-grid, .claim-grid { grid-template-columns: 1fr; }
+    .state-row, .assign-cell, .claim-cell { border-right: 0; }
+    .loop-svg .loop-label { font-size: 18px; letter-spacing: 2.2px; }
+    .window h2 { font-size: clamp(20px, 7vw, 28px); }
+  }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+  /* ————— WHITE-TEXT OVER DESERT — global overrides for all main-page elements
+     (Intelligence overlay keeps its own white-bg/dark-text styling.) ————— */
+
+  /* State catalog */
+  .states-grid { border-top-color: rgba(255,255,255,0.6); }
+  .state-row {
+    border-bottom-color: rgba(255,255,255,0.6);
+    border-right-color: rgba(255,255,255,0.6);
+  }
+  .state-row .state-name { color: #FFFFFF; }
+  .state-row .state-desc { color: rgba(255,255,255,0.75); }
+  .state-row:hover { background: rgba(255,255,255,0.08); }
+
+  /* State assignment cards */
+  .assign-grid { border-top-color: rgba(255,255,255,0.6); }
+  .assign-cell {
+    border-bottom-color: rgba(255,255,255,0.6);
+    border-right-color: rgba(255,255,255,0.6);
+  }
+  .assign-cell .a-name { color: #FFFFFF; }
+  .assign-cell .a-label { color: rgba(255,255,255,0.75); }
+  .assign-cell ul { color: #FFFFFF; }
+  .assign-intro { color: #FFFFFF; }
+  .assign-intro .dim { color: rgba(255,255,255,0.65); }
+
+  /* Claim grid */
+  .claim-grid { border-top-color: rgba(255,255,255,0.6); }
+  .claim-cell {
+    border-bottom-color: rgba(255,255,255,0.6);
+    border-right-color: rgba(255,255,255,0.6);
+  }
+  .claim-cell .c-name { color: #FFFFFF; }
+  .claim-cell .c-status { color: rgba(255,255,255,0.75); }
+  .claim-cell.is-reserved .c-status { color: #FFFFFF; }
+  .claim-cell.is-assigned { background: rgba(255,255,255,0.06); }
+  .claim-cell:hover:not(.is-assigned) { background: rgba(255,255,255,0.08); }
+  .claim-legend { color: rgba(255,255,255,0.75); }
+  .claim-legend .lg-mark { border-color: #FFFFFF; }
+  .claim-legend .lg-mark--reserved { background: #FFFFFF; }
+  .claim-legend .lg-mark--assigned { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.6); }
+
+  /* Loop cycle SVG — invert ink → white */
+  .loop-svg { color: #FFFFFF; }
+  .loop-svg .loop-arc { stroke: #FFFFFF; }
+  .loop-svg .loop-node circle.node-dot { fill: #FFFFFF; }
+  .loop-svg .loop-label { fill: #FFFFFF; }
+
+  /* Map SVG — light outlines over desert */
+  .map-svg .land {
+    fill: transparent;
+    stroke: rgba(255,255,255,0.85);
+    stroke-width: 0.55;
+  }
+  .map-svg .graticule { stroke: rgba(255,255,255,0.18); }
+  /* The 2 ASSIGNED dots must stay solid copper. Defined AFTER any generic .dot
+     override so cascade specificity keeps the copper fill. */
+  .map-svg .dot--copper { fill: var(--copper-deep) !important; }
+  .map-legend { color: rgba(255,255,255,0.75); }
+  .map-wrap.is-loading::before { color: rgba(255,255,255,0.7); }
+
+  /* Form */
+  .field { border-bottom-color: rgba(255,255,255,0.7); }
+  .field label { color: rgba(255,255,255,0.75); }
+  /* Empty input — white placeholder over the desert, no background */
+  .field input, .field textarea {
+    color: #FFFFFF;
+    background: transparent;
+    caret-color: var(--copper);
+    transition: background-color .25s var(--ease), color .25s var(--ease), padding .25s var(--ease);
+  }
+  .field input::placeholder, .field textarea::placeholder { color: rgba(255,255,255,0.5); }
+
+  /* As soon as the user types anything, a white background fills the field
+     and the text turns copper — like a highlight following the typing. */
+  .field input:not(:placeholder-shown),
+  .field textarea:not(:placeholder-shown) {
+    background-color: #FFFFFF;
+    color: var(--copper-deep);
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .field-selected.empty {
+    -webkit-text-fill-color: rgba(255,255,255,0.45);
+    color: rgba(255,255,255,0.45);
+  }
+
+  /* Buttons over desert */
+  .btn { border-color: #FFFFFF; color: #FFFFFF; }
+  .btn:hover { background: #FFFFFF; color: var(--ink); }
+  .btn--ghost { color: rgba(255,255,255,0.7); }
+  .btn--ghost:hover { color: #FFFFFF; background: none; }
+
+  /* Scroll hint at first section — keep white (already configured) */
+  .scroll-hint { color: #FFFFFF; }
+
+  /* ————— WHITE-LIGHT VIBRATION on all main page text —————
+     Subtle text-shadow pulse so the white type appears to breathe over the desert. */
+  @keyframes whiteVibrate {
+    0%, 100% { text-shadow: 0 0 0 rgba(255,255,255,0); }
+    50%      { text-shadow: 0 0 14px rgba(255,255,255,0.55); }
+  }
+  .window h2,
+  .window .eyebrow,
+  .window-body,
+  .window .lede-big,
+  .lede-big,
+  .state-row .state-name,
+  .state-row .state-desc,
+  .assign-cell .a-name,
+  .assign-cell .a-label,
+  .assign-cell ul li,
+  .assign-intro,
+  .claim-cell .c-name,
+  .claim-cell .c-status,
+  .claim-legend,
+  .map-legend,
+  .field label,
+  .field input,
+  .field textarea,
+  .submitted-msg p {
+    animation: whiteVibrate 4.2s ease-in-out infinite;
+  }
+  /* Reduced motion preference — turn the pulse off */
+  @media (prefers-reduced-motion: reduce) {
+    .window h2, .window .eyebrow, .window-body, .window .lede-big,
+    .state-row .state-name, .state-row .state-desc,
+    .assign-cell .a-name, .assign-cell .a-label, .assign-cell ul li, .assign-intro,
+    .claim-cell .c-name, .claim-cell .c-status, .claim-legend, .map-legend,
+    .field label, .field input, .field textarea, .submitted-msg p {
+      animation: none;
+    }
+  }
+
+  /* ————— MAP LEGEND DOTS ————— */
+  /* ASSIGNED · copper-filled (default behaviour kept).
+     AVAILABLE TERRITORY · transparent fill with white frame. */
+  .map-legend .lg-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--copper-deep);
+    box-sizing: border-box;
+  }
+  .map-legend .lg-dot--copper {
+    background: var(--copper-deep);
+  }
+  /* Available-territory square — transparent fill, white frame */
+  .map-legend .lg-square-frame {
+    width: 9px; height: 9px;
+    background: transparent;
+    border: 1px solid #FFFFFF;
+    box-sizing: border-box;
+    display: inline-block;
+  }
+
+  /* ————— HOVER: white-veil + copper text on State / Assign / Claim cells ————— */
+  .state-row:hover,
+  .assign-cell:hover,
+  .claim-cell:hover:not(.is-assigned) {
+    background: rgba(255,255,255,0.88);
+    transition: background .35s var(--ease);
+  }
+  /* All text inside hovered cell becomes copper-gradient */
+  .state-row:hover .state-name,
+  .state-row:hover .state-desc,
+  .assign-cell:hover .a-name,
+  .assign-cell:hover .a-label,
+  .assign-cell:hover ul li,
+  .claim-cell:hover:not(.is-assigned) .c-name,
+  .claim-cell:hover:not(.is-assigned) .c-status {
+    color: var(--copper-deep);
+    background: linear-gradient(90deg, var(--copper-deep) 0%, var(--copper) 55%, var(--copper-light) 100%);
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: none;       /* stop the white pulse while veil is shown */
+    text-shadow: none;
+  }
+
+  /* ————— MAP BIGGER — almost full screen ————— */
+  .map-window {
+    max-width: 96vw;
+    padding: 40px clamp(16px, 2.5vw, 36px);
+  }
+  .map-wrap { min-height: 360px; }
+  .map-svg { width: 100%; height: auto; max-height: 78vh; }
+
+  /* Map — mobile only (desktop rules above stay unchanged) */
+  @media (max-width: 600px) {
+    #scroll-6 .map-window {
+      --map-gap: clamp(22px, 5.5vw, 30px);
+      padding: 28px 12px;
+    }
+    #scroll-6 .map-window .window-body {
+      margin-top: 18px;
+    }
+    #scroll-6 .map-wrap {
+      width: calc(100vw - 32px);
+      max-width: none;
+      margin-left: calc(50% - 50vw + 16px);
+      margin-right: calc(50% - 50vw + 16px);
+      margin-top: var(--map-gap);
+      min-height: 0;
+    }
+    #scroll-6 .map-svg {
+      width: 100%;
+      max-height: none;
+      display: block;
+    }
+    #scroll-6 .map-svg text {
+      font-size: 11px;
+      letter-spacing: 2px;
+    }
+    #scroll-6 .map-legend {
+      margin-top: var(--map-gap);
+      font-size: 9px;
+      letter-spacing: 0.24em;
+      gap: 16px;
+    }
+  }
+
+  /* ————— PAGE LOADING (cactus · white screen) ————— */
+  .page-loading {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 1.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+    pointer-events: all;
+  }
+  .page-loading.is-fading { opacity: 0; pointer-events: none; }
+
+  .page-loading__content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+  }
+
+  .page-loading__video-wrap {
+    position: relative;
+    width: fit-content;
+    height: auto;
+    overflow: visible;
+    flex-shrink: 0;
+    line-height: 0;
+    background: #FFFFFF;
+  }
+
+  .page-loading__video {
+    display: block;
+    position: relative;
+    width: clamp(40px, 5vw, 48px);
+    height: auto;
+    max-width: none;
+    object-fit: contain;
+    object-position: top center;
+    vertical-align: top;
+    margin-bottom: 0;
+    background: #FFFFFF;
+  }
+
+  .page-loading__video-wrap--safari,
+  .page-loading__video--safari {
+    background: #FFFFFF;
+  }
+
+  .page-loading__below {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .page-loading__below.is-visible { opacity: 1; }
+
+  .page-loading__text {
+    font-family: var(--sans);
+    font-size: 11px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: #888888;
+    text-align: center;
+  }
+
+  .page-loading__bar-container {
+    width: clamp(120px, 35vw, 160px);
+    height: 1px;
+    background: rgba(0, 0, 0, 0.06);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .page-loading__bar {
+    position: absolute;
+    inset: 0;
+    background: #111111;
+    width: 30%;
+    transform: translateX(-100%);
+    animation: pageLoadingBar 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+  .page-loading__bar.is-full {
+    animation: none;
+    width: 100%;
+    transform: translateX(0);
+    transition: width 0.6s ease;
+  }
+
+  @keyframes pageLoadingBar {
+    0% { transform: translateX(-100%); width: 10%; }
+    50% { transform: translateX(50%); width: 30%; }
+    100% { transform: translateX(200%); width: 10%; }
+  }
+
+  @media (max-width: 900px) {
+    .page-loading__video { width: clamp(32px, 10vw, 42px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .page-loading__bar { animation: none; width: 100%; transform: none; }
+    .page-loading.is-fading { transition-duration: 0.4s; }
+  }
+</style>
+</head>
+<body class="page-loading">
+
+<!-- ————— CACTUS LOADING (plays once, then reveals page) ————— -->
+<div class="page-loading" id="page-loading" role="status" aria-live="polite" aria-label="Loading">
+  <div class="page-loading__content">
+    <div class="page-loading__video-wrap" id="page-loading-video-wrap">
+      <video
+        id="page-loading-video"
+        class="page-loading__video"
+        muted
+        playsinline
+        autoplay
+        loop
+        preload="auto"
+        fetchpriority="high"
+        aria-hidden="true"
+      >
+        <source src="video/newUpdatedCactusCropped.webm" type="video/webm">
+        <source src="video/cactusanimationnewcropped.mp4" type="video/mp4">
+      </video>
+    </div>
+    <div class="page-loading__below" id="page-loading-below">
+      <p class="page-loading__text">You are entering silence</p>
+      <div class="page-loading__bar-container">
+        <div class="page-loading__bar" id="page-loading-bar"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Inline SVG sprite — reusable icons (lock + speaker) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="ico-lock" viewBox="0 0 18 18">
+      <rect x="3.5" y="8.5" width="11" height="8" rx="0.6" fill="none" stroke="currentColor" stroke-width="1.2"/>
+      <path d="M5.5 8.5 V5.5 a3.5 3.5 0 0 1 7 0 V8.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="ico-speaker" viewBox="0 0 24 24">
+      <path d="M4 9 H8 L13 5 V19 L8 15 H4 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      <path d="M16 8.5 Q18.5 12 16 15.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M18.5 6 Q22 12 18.5 18" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ————— DESERT BACKGROUND ————— -->
+<div class="desert-bg" id="desert-bg" aria-hidden="true">
+  <img src="https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=2880&q=95&fm=jpg" srcset="https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=1600&q=92 1600w, https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=2400&q=93 2400w, https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=2880&q=95 2880w, https://images.unsplash.com/photo-1473580044384-7ba9967e16a0?auto=format&fit=crop&w=3600&q=95 3600w" sizes="100vw" alt="" loading="eager" fetchpriority="high">
+</div>
+
+<!-- ————— TOP FRAME ————— -->
+<header class="frame-top">
+  <div class="frame-top__end">
+    <nav>
+      <button class="nav-btn" onclick="openIntel()">INTELLIGENCE</button>
+      <button class="nav-btn" onclick="document.getElementById('scroll-11').scrollIntoView({behavior:'smooth'})">CONTACT</button>
+    </nav>
+    <button class="sound-ctl is-off" id="sound-ctl" onclick="toggleSound()" aria-label="Toggle sound">
+      <span class="sound-bars" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+      </span>
+    </button>
+  </div>
+</header>
+
+<!-- ————— BOTTOM FRAME ————— -->
+<footer class="frame-bottom">
+  <div class="micro">EST. 2026 · 22 STATES</div>
+</footer>
+
+<!-- ————— JOURNEY ————— -->
+<main class="journey">
+
+  <!-- 0 · Initial desert pause (intentionally empty) -->
+  <section class="scroll-section" id="scroll-0">
+    <div class="scroll-hint">Scroll ↓</div>
+  </section>
+
+  <!-- SCROLL 1 -->
+  <section class="scroll-section" id="scroll-1">
+    <div class="window">
+      <div class="eyebrow">01</div>
+      <h2>The Desert<br>Is A System</h2>
+      <div class="window-body">
+        <p>A state-based retention system for hospitality environments.</p>
+        <p>Properties are remembered through states.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 2 -->
+  <section class="scroll-section" id="scroll-2">
+    <div class="window">
+      <div class="eyebrow">02</div>
+      <h2>The Problem</h2>
+      <div class="window-body">
+        <p>Hospitality has mastered service.</p>
+        <p>Hospitality has mastered design.</p>
+        <p>Hospitality has mastered loyalty programs.</p>
+        <p class="dim" style="margin-top:20px;">Yet most guest experiences still end at checkout.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 3 -->
+  <section class="scroll-section" id="scroll-3">
+    <div class="window">
+      <div class="eyebrow">03</div>
+      <h2>Memory</h2>
+      <div class="window-body">
+        <p>Guests rarely remember points.</p>
+        <p>Guests remember how a place made them feel.</p>
+        <p style="margin-top:20px;"><strong>Memory drives return.</strong></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 4 — Beyond The Lobby -->
+  <section class="scroll-section" id="scroll-4">
+    <div class="window">
+      <div class="eyebrow">04 · BEYOND THE LOBBY</div>
+      <div class="bottle-wrap">
+        <svg class="bottle-svg" viewBox="0 0 200 280" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- bottle: cap, collar, neck, body — all white outline only -->
+          <g class="bottle-outline">
+            <rect x="86" y="18" width="28" height="20" rx="1.5"/>
+            <rect x="82" y="38" width="36" height="6"/>
+            <rect x="92" y="44" width="16" height="14"/>
+            <path d="M70 58 H130 V250 Q130 268 110 268 H90 Q70 268 70 250 Z"/>
+          </g>
+          <!-- spray particles emit upward from above the cap -->
+          <g class="spray">
+            <circle class="p" cx="100" cy="20" r="1.6"/>
+            <circle class="p" cx="100" cy="20" r="1.2"/>
+            <circle class="p" cx="100" cy="20" r="1.8"/>
+            <circle class="p" cx="100" cy="20" r="1.0"/>
+            <circle class="p" cx="100" cy="20" r="1.4"/>
+            <circle class="p" cx="100" cy="20" r="1.1"/>
+            <circle class="p" cx="100" cy="20" r="1.5"/>
+          </g>
+        </svg>
+      </div>
+      <div class="window-body" style="margin-top:24px;">
+        <p>Your signature scent already exists.</p>
+        <p>What it lacks is recognition.</p>
+        <p>We identify the state it represents.</p>
+        <p class="dim" style="margin-top:18px;">Then we extend it through ritual, memory, and experience.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 5 — The Principle -->
+  <section class="scroll-section" id="scroll-5">
+    <div class="window">
+      <div class="eyebrow">05 · THE PRINCIPLE</div>
+      <div class="lede-big lede-stack">
+        <div>1 State</div>
+        <div>1 Scent</div>
+        <div>1 Ritual</div>
+      </div>
+      <div class="window-body" style="margin-top:36px;">
+        <p>Each hospitality group receives one exclusive state.</p>
+        <p class="dim" style="margin-top:16px;">No duplication. No competition. No repetition.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 6 — MAP -->
+  <section class="scroll-section" id="scroll-6">
+    <div class="window window--wide map-window">
+      <div class="eyebrow">06</div>
+      <h2>The Global State Network</h2>
+      <div class="window-body" style="margin-top:20px;">
+        <p>The state shapes the space.</p>
+        <p>The space attracts the people.</p>
+        <p>The people become the community.</p>
+      </div>
+      <div class="map-wrap is-loading" id="map-wrap">
+        <svg class="map-svg" id="map-svg" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <!-- Populated at runtime by renderWorldMap() — real coastlines from world-atlas. -->
+        </svg>
+      </div>
+      <div class="map-legend">
+        <span class="lg"><span class="lg-dot lg-dot--copper"></span>Assigned · 2</span>
+        <span class="lg"><span class="lg-square-frame"></span>Available territory</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCROLL 7 — STATES (hover reveal) -->
+  <section class="scroll-section" id="scroll-7">
+    <div class="window window--wide states-window">
+      <div class="eyebrow">07</div>
+      <h2>States</h2>
+      <div class="window-body" style="margin-top:20px;">
+        <p>Twenty-two emotional territories.</p>
+      </div>
+      <div class="states-grid" id="states-grid"></div>
+    </div>
+  </section>
+
+  <!-- SCROLL 8 — STATE ASSIGNMENT -->
+  <section class="scroll-section" id="scroll-8">
+    <div class="window window--wide assign-window">
+      <div class="eyebrow">08</div>
+      <h2>State Assignment</h2>
+      <div class="assign-intro">
+        <p>Each state creates a different guest memory pattern.</p>
+        <p>Different properties require different emotional outcomes.</p>
+        <p class="dim">The selected state becomes the foundation of the property's retention architecture.</p>
+      </div>
+      <div class="assign-grid" id="assign-grid"></div>
+    </div>
+  </section>
+
+  <!-- SCROLL 9 — LOOP OF RETURN (cycle) -->
+  <section class="scroll-section" id="scroll-9">
+    <div class="window flow-window">
+      <div class="eyebrow">09 · HOW IT WORKS</div>
+      <h2>The Loop of Return</h2>
+      <div class="loop-svg-host" id="loop-svg-host"></div>
+    </div>
+  </section>
+
+  <!-- SCROLL 10 — CLAIM -->
+  <section class="scroll-section" id="scroll-10">
+    <div class="window window--wide claim-window">
+      <div class="eyebrow">10 · FOR HOSPITALITY</div>
+      <h2>Claim A State</h2>
+      <div class="window-body" style="margin-top:20px;">
+        <p>Each state can be assigned to one property only.</p>
+      </div>
+      <div class="claim-legend">
+        <span class="lg"><span class="lg-mark"></span>Available</span>
+        <span class="lg"><span class="lg-mark lg-mark--reserved"></span>Reserved</span>
+        <span class="lg"><svg class="lg-lock" viewBox="0 0 18 18" aria-hidden="true"><use href="#ico-lock"/></svg>Assigned</span>
+      </div>
+      <div class="claim-grid" id="claim-grid"></div>
+    </div>
+  </section>
+
+  <!-- SCROLL 11 — FORM -->
+  <section class="scroll-section" id="scroll-11">
+    <div class="window form-window window--narrow">
+      <div id="form-block">
+        <div class="eyebrow">11 · RESIDENCY</div>
+        <h2>Apply For Residency</h2>
+        <form id="apply-form" class="form-body" onsubmit="submitForm(event)">
+          <div class="field">
+            <label for="f-property">Property Name</label>
+            <input id="f-property" name="property" type="text" placeholder="e.g. Atelier Ibiza" required>
+          </div>
+          <div class="field">
+            <label for="f-location">Location · City / Country</label>
+            <input id="f-location" name="location" type="text" placeholder="e.g. Ibiza, Spain" required>
+          </div>
+          <div class="field">
+            <label>Selected State</label>
+            <div class="field-selected empty" id="f-state-display">— Choose from the grid above —</div>
+          </div>
+          <div class="field">
+            <label for="f-concept">Concept</label>
+            <input id="f-concept" name="concept" type="text" placeholder="one-line concept" required>
+          </div>
+          <div class="field">
+            <label for="f-email">Contact Email</label>
+            <input id="f-email" name="email" type="email" placeholder="you@property.com" required>
+          </div>
+          <div class="form-error" id="form-error" hidden>Something went wrong. Please try again.</div>
+          <div class="form-actions">
+            <button type="submit" class="btn" id="form-submit-btn">Secure The Code</button>
+          </div>
+        </form>
+      </div>
+      <div id="submitted" class="submitted-msg" style="display:none;">
+        <h3>Application Received</h3>
+        <p>We will follow up personally to present the model,<br>territory terms, and installation.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ————— INTELLIGENCE OVERLAY (scroll-snap deck, 5 observations) ————— -->
+<div class="intel-overlay" id="intel-overlay" role="dialog" aria-modal="true" aria-label="Hospitality Intelligence">
+  <div class="intel-progress" id="intel-progress">01 / 05</div>
+
+  <section class="intel-screen" data-step="1">
+    <div class="intel-eyebrow">Hospitality Intelligence</div>
+    <div class="intel-num">01</div>
+    <div class="intel-body">
+      <p>Guests experience a property through five senses: sight, sound, touch, taste and scent.</p>
+      <p>Only scent has a direct pathway to memory and emotion.</p>
+    </div>
+    <div class="intel-scroll-hint"><span>Scroll</span><span class="arrow">↓</span></div>
+  </section>
+
+  <section class="intel-screen" data-step="2">
+    <div class="intel-eyebrow">Hospitality Intelligence</div>
+    <div class="intel-num">02</div>
+    <div class="intel-body">
+      <p>Guests remember how a place felt long after they forget room numbers, amenities and layouts.</p>
+    </div>
+    <div class="intel-scroll-hint"><span>Scroll</span><span class="arrow">↓</span></div>
+  </section>
+
+  <section class="intel-screen" data-step="3">
+    <div class="intel-eyebrow">Hospitality Intelligence</div>
+    <div class="intel-num">03</div>
+    <div class="intel-body">
+      <p>A lobby scent may be experienced for minutes.</p>
+      <p>An in-room ritual can be experienced for hours.</p>
+    </div>
+    <div class="intel-scroll-hint"><span>Scroll</span><span class="arrow">↓</span></div>
+  </section>
+
+  <section class="intel-screen" data-step="4">
+    <div class="intel-eyebrow">Hospitality Intelligence</div>
+    <div class="intel-num">04</div>
+    <div class="intel-body">
+      <p>Loyalty programs reward behavior.</p>
+      <p>Memory influences return.</p>
+    </div>
+    <div class="intel-scroll-hint"><span>Scroll</span><span class="arrow">↓</span></div>
+  </section>
+
+  <section class="intel-screen" data-step="5">
+    <div class="intel-eyebrow">Hospitality Intelligence</div>
+    <div class="intel-num">05</div>
+    <div class="intel-body">
+      <p>Every property already communicates a state, whether intentionally or not.</p>
+    </div>
+    <div class="intel-return-hint">
+      <span>Return to the Desert</span>
+      <span class="arrow">↓</span>
+    </div>
+  </section>
+
+  <!-- Invisible 6th snap-slot — scrolling into it closes the deck and brings the page back to the desert -->
+  <section class="intel-screen intel-trigger" data-step="exit" aria-hidden="true"></section>
+</div>
+
+<script>
+  // ————— DESERT AMBIENT SOUND (root-level — mirrors useDesertAudio + useSoundStore) —————
+  const desertAudio = (function () {
+    const TRACK = 'sound/dragon-studio-desert-sand-rustling-482891.mp3';
+    let playing = false;
+    let resumeAfterIntel = false;
+    const audio = new Audio(TRACK);
+    audio.loop = true;
+    audio.volume = 0.55;
+
+    function syncUI(on) {
+      const el = document.getElementById('sound-ctl');
+      if (!el) return;
+      el.classList.toggle('is-on', on);
+      el.classList.toggle('is-off', !on);
+      el.setAttribute('aria-label', on ? 'Pause ambient sound' : 'Play ambient sound');
+    }
+
+    function setPlaying(on) {
+      if (playing === on) return;
+      playing = on;
+      syncUI(on);
+      if (on) {
+        audio.play().catch((err) => {
+          if (err.name !== 'AbortError') console.warn('Audio play error:', err);
+        });
+      } else {
+        audio.pause();
+      }
+    }
+
+    return {
+      toggle: () => setPlaying(!playing),
+      pauseForIntel: () => {
+        resumeAfterIntel = playing;
+        setPlaying(false);
+      },
+      resumeIfNeeded: () => {
+        if (resumeAfterIntel) setPlaying(true);
+        resumeAfterIntel = false;
+      },
+    };
+  })();
+
+  // ————— STATES — flat, no realms grouping —————
+  // Each state carries a hospitality-fit recommendation (bestFor) — 3 property types.
+  const STATES = [
+    { name: "STILLNESS",       desc: "The body settles. The room exhales.",
+      bestFor: ["Wellness Resorts", "Luxury Spas", "Destination Retreats"] },
+    { name: "PRESENCE",        desc: "Attention returns to the body in the room.",
+      bestFor: ["Mindfulness Resorts", "Private Clubs", "Adult-Only Properties"] },
+    { name: "NURTURING",       desc: "Nourish what matters.",
+      bestFor: ["Family Resorts", "Healing Sanctuaries", "Maternity Retreats"] },
+    { name: "STABILITY",       desc: "Establish your ground.",
+      bestFor: ["Heritage Hotels", "Long-Stay Residences", "Corporate Housing"] },
+    { name: "VITAL ENERGY",    desc: "Release the pressure.",
+      bestFor: ["Active Resorts", "Sports Hotels", "Performance Retreats"] },
+    { name: "PHYSICAL RESET",  desc: "Reset the rhythm.",
+      bestFor: ["Detox Retreats", "Recovery Centers", "Jet-Lag Sanctuaries"] },
+    { name: "INNER TRUTH",     desc: "Look within.",
+      bestFor: ["Silent Retreats", "Solo Travel Sanctuaries", "Therapeutic Stays"] },
+    { name: "DIRECTION",       desc: "Command your focus.",
+      bestFor: ["Executive Workspaces", "Founder Retreats", "Coaching Properties"] },
+    { name: "AWAKENING",       desc: "Break the old.",
+      bestFor: ["Transformation Retreats", "Plant Medicine Destinations", "Rite-of-Passage Properties"] },
+    { name: "PERSPECTIVE",     desc: "Change the view.",
+      bestFor: ["Mountaintop Lodges", "Architectural Hotels", "Remote Destinations"] },
+    { name: "CONNECTION",      desc: "Align your values.",
+      bestFor: ["Community-Led Hospitality", "Members Clubs", "Social Properties"] },
+    { name: "BALANCE",         desc: "Find your center.",
+      bestFor: ["Urban Sanctuaries", "Yoga Retreats", "Boutique City Hotels"] },
+    { name: "DESIRE",          desc: "Embrace the fire.",
+      bestFor: ["Romantic Destinations", "Luxury Resorts", "Celebration Travel"] },
+    { name: "INSPIRATION",     desc: "Follow the vision.",
+      bestFor: ["Artist Residencies", "Cultural Hotels", "Design Properties"] },
+    { name: "INNER KNOWING",   desc: "Know without words.",
+      bestFor: ["Spiritual Retreats", "Meditation Sanctuaries", "Silent Properties"] },
+    { name: "RELEASE",         desc: "Let go to become.",
+      bestFor: ["Healing Retreats", "Breath-Work Destinations", "Emotional Recovery Stays"] },
+    { name: "HARMONY",         desc: "Blend the opposites.",
+      bestFor: ["Cross-Cultural Hotels", "Fusion Properties", "Eclectic Boutiques"] },
+    { name: "INTUITION",       desc: "Trust the flow.",
+      bestFor: ["Off-Grid Retreats", "Nomadic Hospitality", "Adventure Lodges"] },
+    { name: "CLARITY",         desc: "Live in the light.",         status: "ASSIGNED · IBIZA",
+      bestFor: ["Executive Retreats", "Leadership Programs", "Business Hotels"] },
+    { name: "RENEWAL",         desc: "Step into the future.",
+      bestFor: ["Repositioning Properties", "Second-Chapter Resorts", "Brand-Refresh Hotels"] },
+    { name: "WHOLENESS",       desc: "Complete the journey.",
+      bestFor: ["Pilgrimage Destinations", "Legacy Properties", "Milestone Resorts"] },
+    { name: "WISDOM",          desc: "Hear the inner guide.",      status: "ASSIGNED · BALI",
+      bestFor: ["Learning Resorts", "Scholar Retreats", "Philosophy Sanctuaries"] },
+    { name: "WONDER",          desc: "Everything is still possible.",
+      bestFor: ["Discovery Lodges", "Imagination Hotels", "Family Adventure Resorts"] },
+    { name: "CREATION",        desc: "The invisible takes form.",
+      bestFor: ["Maker Residencies", "Design Hotels", "Artisan Workshops"] }
+  ];
+
+  // A couple states marked RESERVED to show the system is alive.
+  const RESERVED = new Set(["DESIRE", "BALANCE"]);
+
+  function statusOf(s) {
+    if (s.status) return s.status;
+    if (RESERVED.has(s.name)) return "RESERVED";
+    return "AVAILABLE";
+  }
+
+  // ————— SCROLL 6 — read-only list with hover reveal —————
+  function renderStatesList() {
+    const host = document.getElementById('states-grid');
+    host.innerHTML = STATES.map(s => `
+      <div class="state-row">
+        <div class="state-name">${s.name}</div>
+        <div class="state-desc">${s.desc}</div>
+      </div>
+    `).join('');
+  }
+
+  // ————— SCROLL 7 — assignment recommendations (cards) —————
+  function renderAssignmentGrid() {
+    const host = document.getElementById('assign-grid');
+    host.innerHTML = STATES.map(s => `
+      <div class="assign-cell">
+        <div class="a-name">${s.name}</div>
+        <div class="a-label">Best suited for:</div>
+        <ul>
+          ${s.bestFor.map(p => `<li>${p}</li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+  }
+
+  // ————— SCROLL 9 — claim grid (selectable) —————
+  let chosenName = null;
+
+  function renderClaimGrid() {
+    const host = document.getElementById('claim-grid');
+    const hasChosen = !!chosenName;
+    host.className = 'claim-grid' + (hasChosen ? ' has-chosen' : '');
+    host.innerHTML = STATES.map(s => {
+      const status   = statusOf(s);
+      const assigned = status.startsWith('ASSIGNED');
+      const reserved = status === 'RESERVED';
+      const chosen   = chosenName === s.name;
+      const cls = ['claim-cell'];
+      if (assigned) cls.push('is-assigned');
+      if (reserved) cls.push('is-reserved');
+      if (chosen)   cls.push('is-chosen');
+      const click = assigned ? '' : `onclick="chooseState('${s.name}')"`;
+      const lockSvg = assigned
+        ? '<svg class="c-lock" viewBox="0 0 18 18" aria-hidden="true"><use href="#ico-lock"/></svg>'
+        : '';
+      return `
+        <div class="${cls.join(' ')}" ${click}>
+          <div class="c-name">${s.name}</div>
+          <div class="c-status">${lockSvg}<span>${chosen ? 'CHOSEN' : status}</span></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function chooseState(name) {
+    chosenName = name;
+    const display = document.getElementById('f-state-display');
+    display.textContent = name;
+    display.classList.remove('empty');
+    renderClaimGrid();
+  }
+
+  function getChosenState() {
+    if (!chosenName) return null;
+    return STATES.find((s) => s.name === chosenName) || null;
+  }
+
+  // ————— FORM submit (EmailJS B2B — same credentials as ScreenForm.jsx) —————
+  const EMAILJS_PUBLIC_KEY = 'gGpo_UCDcL0yfGFEc';
+  const B2B_SERVICE_ID = 'jdd_b2b';
+  const B2B_TEMPLATE_ID = 'template_t0g08el';
+
+  async function submitForm(e) {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById('form-submit-btn');
+    const errorEl = document.getElementById('form-error');
+    const chosen = getChosenState();
+
+    if (errorEl) errorEl.hidden = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'SENDING…';
+    }
+
+    const templateParams = {
+      property: form.property.value.trim(),
+      location: form.location.value.trim(),
+      concept: form.concept.value.trim(),
+      email: form.email.value.trim(),
+      realm: '—',
+      state_name: chosen ? chosen.name : '—',
+      state_core: chosen ? chosen.desc : '—',
+      state_biz: chosen ? chosen.bestFor.join(' · ') : '—',
+      state_status: chosen ? statusOf(chosen) : '—',
+    };
+
+    try {
+      await emailjs.send(B2B_SERVICE_ID, B2B_TEMPLATE_ID, templateParams, EMAILJS_PUBLIC_KEY);
+      document.getElementById('form-block').style.display = 'none';
+      document.getElementById('submitted').style.display = 'block';
+    } catch (err) {
+      console.error('EmailJS B2B error:', err);
+      if (errorEl) errorEl.hidden = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Secure The Code';
+      }
+    }
+  }
+
+  // ————— INTELLIGENCE overlay — 5-slide scroll-snap deck —————
+  // Each slide is 100vh; user scrolls/swipes to advance. The deck doesn't loop —
+  // slide 05 ends with a "Return to the Desert" back-link.
+  const INTEL_TOTAL = 5;
+  let intelObserver = null;
+
+  function openIntel() {
+    const overlay = document.getElementById('intel-overlay');
+    overlay.classList.add('active');
+    overlay.scrollTop = 0;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('intel-open');
+    desertAudio.pauseForIntel();
+    updateIntelProgress(1);
+    bindIntelProgress();
+  }
+
+  function closeIntel() {
+    const overlay = document.getElementById('intel-overlay');
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+    document.body.classList.remove('intel-open');
+    desertAudio.resumeIfNeeded();
+    if (intelObserver) { intelObserver.disconnect(); intelObserver = null; }
+  }
+
+  // "Return to the Desert" — closes the deck AND brings the page back
+  // to the top so the first thing the user sees is the desert again.
+  function intelToDesert() {
+    closeIntel();
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 200);
+  }
+
+  function updateIntelProgress(n) {
+    const prog = document.getElementById('intel-progress');
+    if (prog) prog.textContent = `${String(n).padStart(2,'0')} / ${String(INTEL_TOTAL).padStart(2,'0')}`;
+  }
+
+  function bindIntelProgress() {
+    if (intelObserver) intelObserver.disconnect();
+    const root = document.getElementById('intel-overlay');
+    intelObserver = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (!en.isIntersecting || en.intersectionRatio < 0.55) return;
+        // Scrolling into the invisible 6th slot = return to desert
+        if (en.target.classList.contains('intel-trigger')) {
+          intelToDesert();
+          return;
+        }
+        const n = parseInt(en.target.dataset.step, 10);
+        if (!isNaN(n)) updateIntelProgress(n);
+      });
+    }, { root, threshold: [0.55] });
+    document.querySelectorAll('.intel-screen').forEach(s => intelObserver.observe(s));
+  }
+
+  // ————— SOUND toggle —————
+  function toggleSound() {
+    desertAudio.toggle();
+  }
+
+  // ————— ESC closes intel overlay —————
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeIntel();
+  });
+
+  // ————— Scroll-direction-aware frames —————
+  // Down → top frame stays, footer slides out
+  // Up   → footer comes back, top frame slides out
+  // Top  → both visible
+  (function bindScrollDirection() {
+    let lastY = 0;
+    let ticking = false;
+    const TH  = 8;
+    const TOP = 30;
+
+    function update() {
+      const y  = window.scrollY;
+      const dy = y - lastY;
+      const body = document.body;
+
+      if (y < TOP) {
+        body.classList.remove('scrolling-down', 'scrolling-up');
+      } else if (dy > TH) {
+        body.classList.add('scrolling-down');
+        body.classList.remove('scrolling-up');
+      } else if (dy < -TH) {
+        body.classList.add('scrolling-up');
+        body.classList.remove('scrolling-down');
+      }
+
+      lastY = y;
+      ticking = false;
+    }
+
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        requestAnimationFrame(update);
+        ticking = true;
+      }
+    }, { passive: true });
+  })();
+
+  // ————— SCROLL 8 — Loop of Return rendered as a clockwise cycle —————
+  // 7 nodes evenly spaced around a circle. Arc-arrows between consecutive
+  // nodes. The closing arc (Return → Guest Stay) is drawn in copper so the
+  // viewer reads the loop, not a list.
+  function renderLoopCycle() {
+    const steps = [
+      "Guest Stay",
+      "State Recognition",
+      "Invitation Ritual",
+      "Private Access",
+      "State Continuation",
+      "Memory Retention",
+      "Return"
+    ];
+    const N  = steps.length;
+    const W  = 700, H = 600;
+    const cx = 350, cy = 300;
+    const R  = 170;  // node radius from center
+    const Ra = 158;  // arc radius (slightly inside)
+    const start = -Math.PI / 2;                  // first node at top
+    const step  = (2 * Math.PI) / N;
+    const gap   = 0.18;                           // arc gap (radians) for arrowhead clearance
+
+    // Compute node positions
+    const nodes = steps.map((label, i) => {
+      const a = start + i * step;
+      return { label, a, x: cx + R * Math.cos(a), y: cy + R * Math.sin(a) };
+    });
+
+    let svg = `<svg class="loop-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">`;
+
+    // Arrow markers — white + copper (white-on-desert palette)
+    svg += `
+      <defs>
+        <marker id="loop-arrow-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#FFFFFF"/>
+        </marker>
+        <marker id="loop-arrow-copper" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#9A5A2E"/>
+        </marker>
+      </defs>
+    `;
+
+    // Arcs between consecutive nodes (clockwise)
+    for (let i = 0; i < N; i++) {
+      const a1 = start + i * step + gap;
+      const a2 = start + (i + 1) * step - gap;
+      const x1 = cx + Ra * Math.cos(a1);
+      const y1 = cy + Ra * Math.sin(a1);
+      const x2 = cx + Ra * Math.cos(a2);
+      const y2 = cy + Ra * Math.sin(a2);
+      const isReturnArc = (i === N - 1); // Return → Guest Stay (closes the loop)
+      const cls    = isReturnArc ? 'loop-arc loop-arc--return' : 'loop-arc';
+      const marker = isReturnArc ? 'url(#loop-arrow-copper)'   : 'url(#loop-arrow-ink)';
+      svg += `<path class="${cls}" d="M${x1.toFixed(1)},${y1.toFixed(1)} A${Ra},${Ra} 0 0 1 ${x2.toFixed(1)},${y2.toFixed(1)}" marker-end="${marker}"/>`;
+    }
+
+    // Nodes + labels
+    nodes.forEach((n, i) => {
+      const isEnd = (i === N - 1);
+      const labelR = R + 28;
+      const lx = cx + labelR * Math.cos(n.a);
+      const ly = cy + labelR * Math.sin(n.a);
+      // Pick text-anchor based on horizontal position
+      const c = Math.cos(n.a);
+      const anchor = Math.abs(c) < 0.25 ? 'middle' : (c > 0 ? 'start' : 'end');
+      // Small vertical nudge for top/bottom labels
+      const dy = (n.a < 0 && Math.abs(c) < 0.25) ? -8 : (n.a > Math.PI / 2 - 0.1 && Math.abs(c) < 0.25 ? 18 : 5);
+
+      svg += `<g class="loop-node${isEnd ? ' is-end' : ''}">`;
+      if (isEnd) {
+        // Pulse ring radiates outward from the RETURN dot (mirrors the map markers).
+        svg += `<circle class="node-pulse" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="6"/>`;
+      }
+      svg += `<circle class="node-dot" cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${isEnd ? 6 : 4}"/>`;
+      svg += `<text class="loop-label" x="${lx.toFixed(1)}" y="${(ly + dy).toFixed(1)}" text-anchor="${anchor}">${n.label.toUpperCase()}</text>`;
+      svg += `</g>`;
+    });
+
+    svg += `</svg>`;
+    document.getElementById('loop-svg-host').innerHTML = svg;
+  }
+
+  // ————— SCROLL 5 — Real-world map via d3 + topojson + world-atlas —————
+  // Drawn client-side from a public TopoJSON atlas; projected with NaturalEarth1.
+  async function renderWorldMap() {
+    const svgEl = document.getElementById('map-svg');
+    const wrap  = document.getElementById('map-wrap');
+    if (!svgEl || typeof d3 === 'undefined' || typeof topojson === 'undefined') return;
+
+    const W = 1000, H = 500;
+    svgEl.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svgEl.innerHTML = '';
+
+    let world;
+    try {
+      const res = await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+      world = await res.json();
+    } catch (e) {
+      console.error('World atlas fetch failed:', e);
+      return;
+    }
+
+    // Merge all country geometries EXCEPT Antarctica (id "010"). This both
+    // removes the south polar landmass AND lets the projection fitSize on
+    // the remaining continents — they zoom up to fill the frame.
+    const noAntarctica = world.objects.countries.geometries.filter(g => g.id !== '010');
+    const land = topojson.merge(world, noAntarctica);
+    const projection = d3.geoNaturalEarth1().fitSize([W, H], land);
+    const path = d3.geoPath(projection);
+
+    const ns = 'http://www.w3.org/2000/svg';
+
+    // Sphere — world boundary as a soft warm background plate
+    const spherePath = document.createElementNS(ns, 'path');
+    spherePath.setAttribute('d', path({ type: 'Sphere' }));
+    spherePath.setAttribute('class', 'sphere');
+    svgEl.appendChild(spherePath);
+
+    // Graticule — faint 20° atlas grid
+    const graticule = d3.geoGraticule().step([20, 20]);
+    const gratPath = document.createElementNS(ns, 'path');
+    gratPath.setAttribute('d', path(graticule()));
+    gratPath.setAttribute('class', 'graticule');
+    svgEl.appendChild(gratPath);
+
+    // Land — filled landmasses on top of the sphere + grid
+    const landPath = document.createElementNS(ns, 'path');
+    landPath.setAttribute('d', path(land));
+    landPath.setAttribute('class', 'land');
+    svgEl.appendChild(landPath);
+
+    // Assigned states — copper with pulsing rings
+    // (No other dots are rendered — the map shows only territory that's claimed.)
+    const assigned = [
+      { name: 'IBIZA · CLARITY', lon:   1.43, lat:  38.91 },
+      { name: 'BALI · WISDOM',   lon: 115.19, lat:  -8.41 }
+    ];
+    assigned.forEach(m => {
+      const [x, y] = projection([m.lon, m.lat]);
+      const xs = x.toFixed(1), ys = y.toFixed(1);
+
+      const ring = document.createElementNS(ns, 'circle');
+      ring.setAttribute('cx', xs); ring.setAttribute('cy', ys); ring.setAttribute('r', 4);
+      ring.setAttribute('class', 'ring');
+      svgEl.appendChild(ring);
+
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', xs); dot.setAttribute('cy', ys); dot.setAttribute('r', 4);
+      dot.setAttribute('class', 'dot dot--copper');
+      svgEl.appendChild(dot);
+
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', xs);
+      label.setAttribute('y', (y - 10).toFixed(1));
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = m.name;
+      svgEl.appendChild(label);
+    });
+
+    // Remove the "Loading map…" placeholder now that the atlas is drawn
+    if (wrap) wrap.classList.remove('is-loading');
+  }
+
+  // ————— SCROLL — fade windows in when section enters viewport —————
+  function observeSections() {
+    const sections = document.querySelectorAll('.scroll-section');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(en => {
+        if (en.isIntersecting) en.target.classList.add('in-view');
+        else en.target.classList.remove('in-view');
+      });
+    }, { threshold: 0.25 });
+    sections.forEach(s => io.observe(s));
+  }
+
+  // ————— PAGE INIT —————
+  (function initPageLoading() {
+    const FADE_MS = 1200;
+    const FALLBACK_MIN_MS = 3000;
+    const overlay = document.getElementById('page-loading');
+    const video = document.getElementById('page-loading-video');
+    const videoWrap = document.getElementById('page-loading-video-wrap');
+    const below = document.getElementById('page-loading-below');
+    const bar = document.getElementById('page-loading-bar');
+
+    let hasPlayedOnce = false;
+    let pageReady = false;
+    let videoDurationMs = FALLBACK_MIN_MS;
+    let playbackTimer = null;
+
+    function markVideoReady() {
+      below?.classList.add('is-visible');
+    }
+
+    function tagSafariSource() {
+      if (!video || !videoWrap) return;
+      const src = video.currentSrc || '';
+      if (src.includes('.mp4')) {
+        videoWrap.classList.add('page-loading__video-wrap--safari');
+        video.classList.add('page-loading__video--safari');
+      }
+    }
+
+    function startPlaybackTimer(ms) {
+      if (playbackTimer) clearTimeout(playbackTimer);
+      playbackTimer = setTimeout(() => {
+        hasPlayedOnce = true;
+        tryDismiss();
+      }, ms);
+    }
+
+    function tryDismiss() {
+      if (!hasPlayedOnce || !pageReady || !overlay) return;
+      bar?.classList.add('is-full');
+      overlay.classList.add('is-fading');
+      setTimeout(() => {
+        overlay.remove();
+        document.body.classList.remove('page-loading');
+        document.getElementById('desert-bg')?.classList.add('visible');
+      }, FADE_MS);
+    }
+
+    if (video) {
+      video.addEventListener('loadedmetadata', () => {
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          videoDurationMs = video.duration * 1000;
+        }
+        tagSafariSource();
+      });
+      video.addEventListener('loadeddata', () => {
+        markVideoReady();
+        tagSafariSource();
+      });
+      video.addEventListener('playing', () => {
+        markVideoReady();
+        startPlaybackTimer(videoDurationMs);
+      });
+      video.addEventListener('error', () => startPlaybackTimer(FALLBACK_MIN_MS));
+      video.play().catch(() => startPlaybackTimer(FALLBACK_MIN_MS));
+    } else {
+      startPlaybackTimer(FALLBACK_MIN_MS);
+    }
+
+    window.addEventListener('load', () => {
+      pageReady = true;
+      tryDismiss();
+    });
+  })();
+
+  window.addEventListener('load', () => {
+    renderStatesList();
+    renderAssignmentGrid();
+    renderClaimGrid();
+    renderLoopCycle();
+    renderWorldMap();
+    observeSections();
+  });
+</script>
+</body>
+</html>
