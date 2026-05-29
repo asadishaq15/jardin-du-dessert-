@@ -1402,6 +1402,17 @@
   </div>
 </div>
 
+<audio
+  id="desert-audio"
+  src="sound/dragon-studio-desert-sand-rustling-482891.mp3"
+  loop
+  muted
+  autoplay
+  playsinline
+  preload="auto"
+  aria-hidden="true"
+></audio>
+
 <!-- Inline SVG sprite — reusable icons (lock + speaker) -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
@@ -1717,11 +1728,21 @@
 <script>
   // ————— DESERT AMBIENT SOUND (root-level — mirrors useDesertAudio + useSoundStore) —————
   const desertAudio = (function () {
-    const TRACK = 'sound/dragon-studio-desert-sand-rustling-482891.mp3';
+    const audio = document.getElementById('desert-audio');
     let playing = false;
     let resumeAfterIntel = false;
-    const audio = new Audio(TRACK);
-    audio.loop = true;
+
+    if (!audio) {
+      return {
+        toggle: () => {},
+        reveal: () => Promise.resolve(),
+        autoplay: () => Promise.resolve(),
+        unlockFromGesture: () => {},
+        pauseForIntel: () => {},
+        resumeIfNeeded: () => {},
+      };
+    }
+
     audio.volume = 0.55;
 
     function syncUI(on) {
@@ -1732,21 +1753,88 @@
       el.setAttribute('aria-label', on ? 'Pause ambient sound' : 'Play ambient sound');
     }
 
-    function setPlaying(on) {
-      if (playing === on) return;
-      playing = on;
-      syncUI(on);
-      if (on) {
-        audio.play().catch((err) => {
-          if (err.name !== 'AbortError') console.warn('Audio play error:', err);
-        });
-      } else {
-        audio.pause();
-      }
+    function markPlaying() {
+      playing = true;
+      syncUI(true);
     }
 
+    /* Keep muted playback running during loading — retry until buffered. */
+    function ensureMutedPlaying() {
+      if (!audio.paused) return Promise.resolve();
+      audio.muted = true;
+      return audio.play().catch(() => Promise.resolve());
+    }
+
+    function bindAutoplayFallback() {
+      const resume = () => {
+        reveal();
+        document.removeEventListener('pointerdown', resume);
+        document.removeEventListener('keydown', resume);
+        window.removeEventListener('scroll', resume);
+      };
+      document.addEventListener('pointerdown', resume, { once: true });
+      document.addEventListener('keydown', resume, { once: true });
+      window.addEventListener('scroll', resume, { once: true, passive: true });
+    }
+
+    /* Safari: unlock in direct response to a loading-screen gesture. */
+    function unlockFromGesture() {
+      audio.muted = false;
+      audio.volume = 0.55;
+      return audio.play().then(() => {
+        markPlaying();
+      }).catch((err) => {
+        if (err.name !== 'AbortError') console.warn('Audio unlock error:', err);
+      });
+    }
+
+    function reveal() {
+      audio.muted = false;
+      audio.volume = 0.55;
+      if (!audio.paused) {
+        markPlaying();
+        return Promise.resolve();
+      }
+      return audio.play().then(() => {
+        markPlaying();
+      }).catch((err) => {
+        if (err.name !== 'AbortError') console.warn('Audio play error:', err);
+        playing = false;
+        syncUI(false);
+        bindAutoplayFallback();
+        return Promise.reject(err);
+      });
+    }
+
+    function setPlaying(on) {
+      if (playing === on) return Promise.resolve();
+      if (!on) {
+        playing = false;
+        syncUI(false);
+        audio.pause();
+        return Promise.resolve();
+      }
+      audio.muted = false;
+      audio.volume = 0.55;
+      return audio.play().then(() => {
+        markPlaying();
+      }).catch((err) => {
+        if (err.name !== 'AbortError') console.warn('Audio play error:', err);
+        playing = false;
+        syncUI(false);
+        return Promise.reject(err);
+      });
+    }
+
+    audio.addEventListener('loadeddata', ensureMutedPlaying);
+    audio.addEventListener('canplaythrough', ensureMutedPlaying);
+    ensureMutedPlaying();
+
     return {
-      toggle: () => setPlaying(!playing),
+      toggle: () => { setPlaying(!playing); },
+      reveal,
+      autoplay: reveal,
+      unlockFromGesture,
       pauseForIntel: () => {
         resumeAfterIntel = playing;
         setPlaying(false);
@@ -2252,12 +2340,17 @@
       if (!hasPlayedOnce || !pageReady || !overlay) return;
       bar?.classList.add('is-full');
       overlay.classList.add('is-fading');
+      desertAudio.reveal();
       setTimeout(() => {
         overlay.remove();
         document.body.classList.remove('page-loading');
         document.getElementById('desert-bg')?.classList.add('visible');
       }, FADE_MS);
     }
+
+    overlay?.addEventListener('pointerdown', () => {
+      desertAudio.unlockFromGesture();
+    }, { once: true });
 
     if (video) {
       video.addEventListener('loadedmetadata', () => {
